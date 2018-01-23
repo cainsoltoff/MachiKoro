@@ -5,6 +5,9 @@ import random
 
 game_db = StaticCardDatabase.load_static_game_database()
 
+def reloadDB():
+    StaticCardDatabase.load_static_game_database(forceReloadFromCSV=True)
+    
 class MachiKoro():
     def __init__(self, numPlayers=3, ai=True):
         self.numPlayers = numPlayers
