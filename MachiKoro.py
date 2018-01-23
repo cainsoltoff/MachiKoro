@@ -24,6 +24,9 @@ class MachiKoro():
             p['landmark_status'] = copy(game_db["init_player_landmark_status"])
             self.players[i] = p
 
+    def patienceFunction(self, player):
+       return (1 - self.players[player]['coins']/self.maxCardCost)
+
     def reset(self):
             self.bank = game_db["init_bank_amt"]
             self.card_supply = game_db["init_card_supply"][:]
@@ -97,7 +100,7 @@ class MachiKoro():
                 self.players[i]['coins'] = self.players[i]['coins'] + transferAmount
                 self.players[self.playerTurn]['coins'] = self.players[self.playerTurn]['coins'] - transferAmount
 
-    def resolvePrimaryAndSecondaryIndustires(self, rollTotal):
+    def resolvePrimaryAndSecondaryIndustries(self, rollTotal):
 
         primary_ids = game_db['roll_card_activations'][rollTotal][0]
         secondary_ids = game_db['roll_card_activations'][rollTotal][1]
@@ -204,7 +207,7 @@ class MachiKoro():
     def resolveRoll(self, rollTotal):
 
         self.resolveRestaurants(rollTotal)
-        self.resolvePrimaryAndSecondaryIndustires(rollTotal)
+        self.resolvePrimaryAndSecondaryIndustries(rollTotal)
         self.resolveMajorEstablishments(rollTotal)
 
 
@@ -224,7 +227,10 @@ class MachiKoro():
         possiblePurchases = possiblePurchasesWithCoins.intersection(currentSupply) - (playerMajorEstablishmentsNoCapacityToBuy) - playerLandmarksNoCapacityToBuy
 
         if self.ai:
-            purchase = random.sample(possiblePurchases.union({-1}), 1)[0]
+            if random.random() < self.patienceFunction(self.playerTurn) or len(possiblePurchases) == 0:
+                purchase = -1
+            else:
+                purchase = random.sample(possiblePurchases, 1)[0]
         else:
             purchase = int(input("Pick a card to purchase " + str(possiblePurchases) + " or -1 to skip: "))
 
@@ -291,21 +297,6 @@ class MachiKoro():
 
 
 if __name__ == "__main__":
-
-    game = MachiKoro()
-    game.turn()
-
-    turnsToComplete = []
-
-    for i in range(1000):
-        if i % 25 == 0:
-            print("Simulations Completed:", i)
-
-        game = MachiKoro()
-        game.turn()
-        turnsToComplete.append(game.turn_num)
-        game.reset()
-
-    print(turnsToComplete)
+    pass
 
 
