@@ -138,7 +138,6 @@ value is True/False depending on whether it has been purchased/activated
 
 """
 
-
 def __generate_card_properties(filename="card_props.csv"):
 
     with open(__CSV_FILE_PATH+filename) as f:
@@ -368,7 +367,7 @@ def __generate_static_game_database_file_from_csv(settingsFile="initial_values.c
 
 def load_static_game_database(forceReloadFromCSV=False, csvFilePath="csv_game_files/"):
     """
-    'static_game_info.pkl' should contain all the static game information about cards (see db schematic)
+    'static_game_info.pkl' should contain all the static game information about cards and initial set up
 
     if 'static_game_info.pkl' doesn't exist or forceReloadFromCSV is True, it will regenerate the file
     from the csv tables

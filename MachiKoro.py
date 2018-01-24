@@ -7,246 +7,260 @@ game_db = StaticCardDatabase.load_static_game_database()
 
 def reloadDB():
     StaticCardDatabase.load_static_game_database(forceReloadFromCSV=True)
-    
+
 class MachiKoro():
-    def __init__(self, numPlayers=3, ai=True):
-        self.numPlayers = numPlayers
-        self.maxCardCost = game_db["max_card_cost"]
+    def __init__(self, num_players=3, ai=True):
+        self.num_players = num_players
+        self.ai = ai
+        self.player_turn = 0
+        self.turn_num = 0
+
+        self.landmark_cards = {card_id for (card_id, card_props) in enumerate(game_db['card_props']) if card_props['type_id'] == 4}
+        self.major_establishment_cards = {card_id for (card_id, card_props) in enumerate(game_db['card_props']) if card_props['type_id'] == 3}
+        self.max_card_cost = game_db["max_card_cost"]
         self.bank = game_db["init_bank_amt"]
         self.card_supply = game_db["init_card_supply"][:]
-        self.playerTurn = 0
-        self.ai = ai
-        self.turn_num = 0
 
         self.players = {}
 
-        for i in range(self.numPlayers):
+        for i in range(self.num_players):
             p = {}
             p['coins'] = game_db["init_player_coin_amt"]
             p['player_cards'] = game_db["init_player_cards"][:]
             p['landmark_status'] = copy(game_db["init_player_landmark_status"])
             self.players[i] = p
 
-    def patienceFunction(self, player):
-       return (1 - self.players[player]['coins']/self.maxCardCost)
+    def patience_function(self, player):
+       return 0
+       # 1 - 0 * self.players[player]['coins']/self.max_card_cost
+
 
     def reset(self):
             self.bank = game_db["init_bank_amt"]
             self.card_supply = game_db["init_card_supply"][:]
-            self.playerTurn = 0
+            self.player_turn = 0
             self.players = {}
             self.turn_num = 0
 
-            for i in range(self.numPlayers):
+            for i in range(self.num_players):
                 p = {}
                 p['coins'] = game_db["init_player_coin_amt"]
                 p['player_cards'] = game_db["init_player_cards"][:]
                 p['landmark_status'] = copy(game_db["init_player_landmark_status"])
                 self.players[i] = p
 
-    def checkGameOver(self, player):
+    def check_game_over(self, player):
         return all(self.players[player]['landmark_status'].values())
 
-    def nextPlayer(self):
-        self.playerTurn = (self.playerTurn + 1) % self.numPlayers
+    def advance_to_next_player(self):
+        self.player_turn = (self.player_turn + 1) % self.num_players
 
-    def trainStationActivated(self, player):
+    def train_station_constructed(self, player):
         return self.players[player]['landmark_status'][15]
 
-    def shoppingMallActivated(self, player):
+    def shopping_mall_constructed(self, player):
         return self.players[player]['landmark_status'][16]
 
-    def amusementParkActivated(self, player):
+    def amusement_park_constructed(self, player):
         return self.players[player]['landmark_status'][17]
 
-    def radioTowerActivated(self, player):
+    def radio_tower_constructed(self, player):
         return self.players[player]['landmark_status'][18]
 
-    def rolledDoubles(self, dice):
-        if type(dice) == int:
+    def secondary_industry_depends_on_primary_industries(self, secondary_card_id):
+        return game_db["card_props"][secondary_card_id]["pay_amt"] == 0
+
+    def rolled_doubles(self, dice):
+        if len(dice) == 1:
             return False
         else:
             return dice[0] == dice[1]
 
-    def rollDice(self):
+    def roll_dice(self):
 
-        if self.trainStationActivated(self.playerTurn):
+        num_dice = 1
+
+        if self.train_station_constructed(self.player_turn):
             if self.ai:
-                numDice = random.randint(1,2)
+                num_dice = random.randint(1,2)
             else:
-                numDice = int(input("Roll 1 or 2 Dice?"))
-        else:
-            numDice = 1
+                num_dice = int(input("Roll 1 or 2 Dice?"))
 
-        if numDice == 1:
-            dice = random.randint(1, 6)
-            rollTotal = dice
+        if num_dice == 1:
+            dice = random.randint(1, 6),
+            roll_sum = sum(dice)
         else:
             dice = random.randint(1, 6), random.randint(1, 6)
-            rollTotal = sum(dice)
+            roll_sum = sum(dice)
 
-        # print("Rolled", dice, "for a total of", rollTotal)
-        return dice, rollTotal
+        return dice, roll_sum
 
-    def resolveRestaurants(self, rollTotal):
-        checkOrder = list(range(self.numPlayers))
-        checkOrder = checkOrder[:self.playerTurn][::-1] + checkOrder[self.playerTurn+1:][::-1]
+    def resolve_restaurants(self, roll_sum):
 
-        rest_ids = game_db['roll_card_activations'][rollTotal][2]
+        players = list(range(self.num_players))
+        player_order_to_check_restaurants = players[:self.player_turn][::-1] + players[self.player_turn+1:][::-1] # counterclockwise
 
-        for i in checkOrder:
-            for card_id in rest_ids:
-                card_id_count = self.players[i]['player_cards'][card_id]
-                shoppingMallIncrement = 1 if self.shoppingMallActivated(i) else 0
-                transferAmount = min(self.players[self.playerTurn]['coins'], (game_db["card_props"][card_id]["pay_amt"] + shoppingMallIncrement) * int(card_id_count))
+        restaurant_cards_activated_for_roll = game_db['roll_card_activations'][roll_sum][2]
 
-                self.players[i]['coins'] = self.players[i]['coins'] + transferAmount
-                self.players[self.playerTurn]['coins'] = self.players[self.playerTurn]['coins'] - transferAmount
+        for i in player_order_to_check_restaurants:
+            for card_id in restaurant_cards_activated_for_roll:
+                number_of_cards_owned = self.players[i]['player_cards'][card_id]
 
-    def resolvePrimaryAndSecondaryIndustries(self, rollTotal):
+                shopping_mall_restaurant_boost = 1 if self.shopping_mall_constructed(i) else 0
 
-        primary_ids = game_db['roll_card_activations'][rollTotal][0]
-        secondary_ids = game_db['roll_card_activations'][rollTotal][1]
+                amount_to_transfer = min(
+                    self.players[self.player_turn]['coins'],
+                    (game_db["card_props"][card_id]["pay_amt"] + shopping_mall_restaurant_boost) * int(number_of_cards_owned))
 
-        #primary_industries
+                self.players[i]['coins'] += amount_to_transfer
+                self.players[self.player_turn]['coins'] -= amount_to_transfer
 
-        for i in range(self.numPlayers):
-            for card_id in primary_ids:
-                card_id_count = self.players[i]['player_cards'][card_id]
-                self.players[i]['coins'] = self.players[i]['coins'] + card_id_count * game_db["card_props"][card_id]["pay_amt"]
+    def resolve_primary_industries(self, roll_sum):
 
-        # secondary_industries
-        for card_id in secondary_ids:
-            sec_card_id_count = self.players[self.playerTurn]['player_cards'][card_id]
+        primary_cards_activated_for_roll = game_db['roll_card_activations'][roll_sum][0]
 
-            if game_db["card_props"][card_id]["pay_amt"] == 0:
-                prim_dep = game_db["secondary_ind_dep"][card_id]["dependency_list"]
-                multiplier = game_db["secondary_ind_dep"][card_id]["multiplier"]
-                prim = self.players[self.playerTurn]['player_cards'][card_id]
+        for i in range(self.num_players):
+            for card_id in primary_cards_activated_for_roll:
+                number_of_cards_owned = self.players[i]['player_cards'][card_id]
+                card_payout = game_db["card_props"][card_id]["pay_amt"]
+                self.players[i]['coins'] += number_of_cards_owned * card_payout
 
-                for prim in prim_dep:
-                    prim_card_id_count = self.players[self.playerTurn]['player_cards'][prim]
-                    self.players[self.playerTurn]['coins'] = (self.players[self.playerTurn]['coins'] +
-                                                              prim_card_id_count * multiplier)
+    def resolve_secondary_industries(self, roll_sum):
+
+        secondary_cards_activated_for_roll = game_db['roll_card_activations'][roll_sum][1]
+
+        for secondary_card_id in secondary_cards_activated_for_roll:
+            number_of_secondary_card_owned = self.players[self.player_turn]['player_cards'][secondary_card_id]
+
+            if game_db["card_props"][secondary_card_id]["icon_id"] == 3 and self.shopping_mall_constructed(self.player_turn):
+                shopping_mall_secondary_boost = 1
             else:
-                shoppingMallIncrement = 1 if self.shoppingMallActivated(i) else 0
-                if game_db["card_props"][sec_card_id_count]["icon_id"] == 3:
-                    self.players[self.playerTurn]['coins'] = (self.players[self.playerTurn]['coins']
-                                                              + sec_card_id_count * (shoppingMallIncrement + game_db["card_props"][sec_card_id_count]["pay_amt"]))
-                else:
-                    self.players[self.playerTurn]['coins'] = (self.players[self.playerTurn]['coins']
-                                                              + sec_card_id_count * game_db["card_props"][sec_card_id_count]["pay_amt"])
+                shopping_mall_secondary_boost = 0
 
-    def resolveMajorEstablishments(self, rollTotal):
 
-        cards = game_db['roll_card_activations'][rollTotal][3]
+            if self.secondary_industry_depends_on_primary_industries(secondary_card_id):
+                primary_industries_for_secondary_industry = game_db["secondary_ind_dep"][secondary_card_id]["dependency_list"]
+                pay_per_primary_industry = game_db["secondary_ind_dep"][secondary_card_id]["multiplier"]
 
-        for card_id in cards:
-            if self.players[self.playerTurn]['player_cards'][card_id] == 0:
-                continue
+                for primary_card_id in primary_industries_for_secondary_industry:
+                    number_of_primary_card_owned = self.players[self.player_turn]['player_cards'][primary_card_id]
+                    self.players[self.player_turn]['coins'] += (number_of_primary_card_owned * pay_per_primary_industry
+                                                               + shopping_mall_secondary_boost) * number_of_secondary_card_owned
             else:
+                secondary_card_payout = game_db["card_props"][number_of_secondary_card_owned]["pay_amt"]
+                self.players[self.player_turn]['coins'] += (shopping_mall_secondary_boost + secondary_card_payout) * number_of_secondary_card_owned
+
+
+    def resolve_major_establishments(self, roll_sum):
+
+        major_establishment_cards_activated = game_db['roll_card_activations'][roll_sum][3]
+
+        for card_id in major_establishment_cards_activated:
+            if self.players[self.player_turn]['player_cards'][card_id] != 0:
                 if card_id == 12:
-                    for i in range(self.numPlayers):
-                        if i == self.playerTurn:
-                            continue
-                        else:
-                            transferAmount = min(self.players[i]['coins'], 2)
-                            self.players[i]['coins'] = self.players[i]['coins'] - transferAmount
-                            self.players[self.playerTurn]['coins'] = self.players[self.playerTurn]['coins'] + transferAmount
-                if card_id == 13:
-                    options = set(range(self.numPlayers)) - set([self.playerTurn])
+                    for i in range(self.num_players):
+                        if i != self.player_turn:
+                            transfer_amount = min(self.players[i]['coins'], 2)
+                            self.players[i]['coins'] -= transfer_amount
+                            self.players[self.player_turn]['coins'] += transfer_amount
+                elif card_id == 13:
+                    players_to_choose_from = [i for i in range(self.num_players) if i != self.player_turn]
 
                     if self.ai:
-                        player = random.sample(options, 1)[0]
+                        player = random.choice(players_to_choose_from)
                     else:
-                        player = int(input("Select a player " + str(options) + " to take from:"))
+                        player = int(input("Select a player " + str(players_to_choose_from) + " to take from:"))
 
-                        while player not in options:
-                            player = int(input("Select a player " + str(options) + " to take from:"))
+                        while player not in players_to_choose_from:
+                            player = int(input("Select a player " + str(players_to_choose_from) + " to take from:"))
 
-                    transferAmount = min(self.players[player]['coins'], 5)
-                    self.players[player]['coins'] = self.players[player]['coins'] - transferAmount
-                    self.players[self.playerTurn]['coins'] = self.players[self.playerTurn]['coins'] + transferAmount
+                    transfer_amount = min(self.players[player]['coins'], 5)
+                    self.players[player]['coins'] -= transfer_amount
+                    self.players[self.player_turn]['coins'] += transfer_amount
+                elif card_id == 14:
+                    players_to_choose_from = [i for i in range(self.num_players) if i != self.player_turn]
 
-                if card_id == 14:
-                    options = set(range(self.numPlayers)) - set([self.playerTurn])
-
-
-                    playerOptions = {}
-                    for player in range(self.numPlayers):
-                        playerCardOptions = {}
-                        for (card_id, card_count) in enumerate(self.players[player]['player_cards']):
+                    swappable_cards_for_players = {}
+                    for player in range(self.num_players):
+                        swappable_cards = []
+                        for (card_id, amount_owned) in enumerate(self.players[player]['player_cards']):
                             type_id = game_db["card_props"][card_id]["type_id"]
-                            if card_count != 0 and type_id not in (3, 4):
-                                playerCardOptions[card_id] = card_count
+                            if amount_owned != 0 and type_id not in (3, 4):
+                                swappable_cards.append(card_id)
 
-                        playerOptions[player] = playerCardOptions
+                            swappable_cards_for_players[player] = swappable_cards
 
                     if self.ai:
-                        player = random.sample(options, 1)[0]
-                        cardToTake = random.choice(list(playerOptions[player].keys()))
-                        cardToGive = random.choice(list(playerOptions[self.playerTurn].keys()))
+                        player_to_swap_with = random.choice(players_to_choose_from)
+                        cardToTake = random.choice(swappable_cards_for_players[player_to_swap_with])
+                        cardToGive = random.choice(swappable_cards_for_players[self.player_turn])
                     else:
-                        while player not in options:
-                            player = int(input("Select a player " + str(options) + " to swap non-major card with:"))
+                        while player_to_swap_with not in players_to_choose_from:
+                            player_to_swap_with = int(input("Select a player " + str(players_to_choose_from) + " to swap non-major card with:"))
 
-                        cardToTake = int(input("Select a card " + str(set(playerOptions[player].keys())) + " to take:"))
+                        cardToTake = int(input("Select a card " + str(swappable_cards_for_players[player_to_swap_with]) + " to take:"))
 
-                        while cardToTake not in playerOptions[player]:
-                            cardToTake = int(input("Select a card " + str(set(playerOptions[player].keys())) + " to take:"))
+                        while cardToTake not in swappable_cards_for_players[player_to_swap_with]:
+                            cardToTake = int(input("Select a card " + str(swappable_cards_for_players[player_to_swap_with]) + " to take:"))
 
-                        cardToGive = int(input("Select a card " + str(set(playerOptions[self.playerTurn].keys())) + " to giverr:"))
+                        cardToGive = int(input("Select a card " + str(swappable_cards_for_players[self.player_turn]) + " to give:"))
 
-                        while cardToGive not in playerOptions[self.playerTurn]:
-                           cardToGive = int(input("Select a card " + str(set(playerOptions[self.playerTurn].keys())) + " to giverr:"))
-
-
-                    self.players[player]['player_cards'][cardToTake] -= 1
-                    self.players[self.playerTurn]['player_cards'][cardToTake] += 1
-
-                    self.players[player]['player_cards'][cardToGive] += 1
-                    self.players[self.playerTurn]['player_cards'][cardToGive] -= 1
-
-    def resolveRoll(self, rollTotal):
-
-        self.resolveRestaurants(rollTotal)
-        self.resolvePrimaryAndSecondaryIndustries(rollTotal)
-        self.resolveMajorEstablishments(rollTotal)
+                        while cardToGive not in swappable_cards_for_players[self.player_turn]:
+                           cardToGive = int(input("Select a card " + str(swappable_cards_for_players[self.player_turn]) + " to give:"))
 
 
-    def makePurchaseDecision(self):
-        coinTotal = self.players[self.playerTurn]['coins']
+                    self.players[player_to_swap_with]['player_cards'][cardToTake] -= 1
+                    self.players[self.player_turn]['player_cards'][cardToTake] += 1
 
-        possiblePurchasesWithCoins = set(game_db['cards_for_coin_amt'][min(coinTotal, self.maxCardCost)])
+                    self.players[player_to_swap_with]['player_cards'][cardToGive] += 1
+                    self.players[self.player_turn]['player_cards'][cardToGive] -= 1
 
-        majorEstablishments = {card_id for (card_id, card_props) in enumerate(game_db['card_props']) if card_props['type_id'] == 3}
-        landmarks = {card_id for (card_id, card_props) in enumerate(game_db['card_props']) if card_props['type_id'] == 4}
+    def resolve_roll(self, roll_sum):
 
-        playerMajorEstablishmentsNoCapacityToBuy = {card_id for card_id in majorEstablishments if self.players[self.playerTurn]['player_cards'][card_id] == 1}
+        self.resolve_restaurants(roll_sum)
+        self.resolve_primary_industries(roll_sum)
+        self.resolve_secondary_industries(roll_sum)
+        self.resolve_major_establishments(roll_sum)
 
-        playerLandmarksNoCapacityToBuy = {card_id for card_id in self.players[self.playerTurn]['landmark_status'] if self.players[self.playerTurn]['landmark_status'][card_id] == True}
-        currentSupply = {card_id for (card_id,supply) in enumerate(self.card_supply) if supply > 0}
 
-        possiblePurchases = possiblePurchasesWithCoins.intersection(currentSupply) - (playerMajorEstablishmentsNoCapacityToBuy) - playerLandmarksNoCapacityToBuy
+    def make_purchase_decision(self):
+
+        player_coin_total = self.players[self.player_turn]['coins']
+
+        cards_affordable_with_player_coin_total = set(game_db['cards_for_coin_amt'][min(player_coin_total, self.max_card_cost)])
+
+        major_establishments_already_owned = {card_id for card_id in self.major_establishment_cards
+                                              if self.players[self.player_turn]['player_cards'][card_id] == 1}
+
+        landmarks_already_built = {card_id for card_id in self.players[self.player_turn]['landmark_status']
+                                   if self.players[self.player_turn]['landmark_status'][card_id] == True}
+
+        cards_with_supply_left = {card_id for (card_id, supply) in enumerate(self.card_supply) if supply > 0}
+
+        purchase_options = list((cards_affordable_with_player_coin_total & cards_with_supply_left
+                              - major_establishments_already_owned
+                              - landmarks_already_built))
 
         if self.ai:
-            if random.random() < self.patienceFunction(self.playerTurn) or len(possiblePurchases) == 0:
-                purchase = -1
+            if random.random() < self.patience_function(self.player_turn) or len(purchase_options) == 0:
+                purchase_choice = -1
             else:
-                purchase = random.sample(possiblePurchases, 1)[0]
-        else:
-            purchase = int(input("Pick a card to purchase " + str(possiblePurchases) + " or -1 to skip: "))
+                purchase_choice = random.choice(purchase_options)
+                for landmark in self.landmark_cards:
+                    if landmark in purchase_options:
+                        purchase_choice = landmark
 
-        if purchase == -1:
-            return
-        elif purchase in landmarks:
-            self.players[self.playerTurn]['landmark_status'][purchase] = True
-            self.players[self.playerTurn]['coins'] -= game_db["card_props"][purchase]["cost"]
         else:
-            self.players[self.playerTurn]['player_cards'][purchase] += 1
-            self.card_supply[purchase] -= 1
-            self.players[self.playerTurn]['coins'] -= game_db["card_props"][purchase]["cost"]
+            purchase_choice = int(input("Pick a card to purchase " + str(purchase_options) + " or -1 to skip:"))
 
+        if purchase_choice != -1:
+            if purchase_choice in self.landmark_cards:
+                self.players[self.player_turn]['landmark_status'][purchase_choice] = True
+                self.players[self.player_turn]['coins'] -= game_db["card_props"][purchase_choice]["cost"]
+            else:
+                self.players[self.player_turn]['player_cards'][purchase_choice] += 1
+                self.card_supply[purchase_choice] -= 1
+                self.players[self.player_turn]['coins'] -= game_db["card_props"][purchase_choice]["cost"]
 
     def turn(self):
 
@@ -257,9 +271,9 @@ class MachiKoro():
             # print("Player ", self.playerTurn,"'s Turn", sep="")
 
             # Roll The Dice
-            dice, rollTotal = self.rollDice()
+            dice, roll_sum = self.roll_dice()
 
-            if self.radioTowerActivated(self.playerTurn):
+            if self.radio_tower_constructed(self.player_turn):
                 # print("Rolls", dice, "for a total of", rollTotal)
 
                 if self.ai:
@@ -268,38 +282,19 @@ class MachiKoro():
                     reroll = input("Roll again? Y or N")
 
                 if str.lower(reroll) == 'y':
-                    dice, rollTotal = self.rollDice()
+                    dice, roll_sum = self.roll_dice()
 
             # print("Rolls", dice, "for a total of", rollTotal)
 
             # Resolve The Roll
 
-            self.resolveRoll(rollTotal)
-            self.makePurchaseDecision()
+            self.resolve_roll(roll_sum)
+            self.make_purchase_decision()
 
-            if self.checkGameOver(self.playerTurn):
+            if self.check_game_over(self.player_turn):
                 break
 
-            # Advance To Next Player
-
-            # for i in range(3):
-            #
-            #     print("Player", i)
-            #     print("---------")
-            #     print("Bank:", game.players[i]['coins'])
-            #     print("Cards:", game.players[i]["player_cards"])
-            # print()
-
-            if self.amusementParkActivated(self.playerTurn) and self.rolledDoubles(dice):
+            if self.amusement_park_constructed(self.player_turn) and self.rolled_doubles(dice):
                 continue
             else:
-                self.nextPlayer()
-
-        # print(self.playerTurn, "Wins!")
-        # print("Game Over!")
-
-
-if __name__ == "__main__":
-    pass
-
-
+                self.advance_to_next_player()
