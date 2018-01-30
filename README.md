@@ -1,6 +1,6 @@
 # Machi Koro by Cain Soltoff
 
-I recently played Machi Koro for the first time with some friends.  Given the relative simplicity, it seemed like the perfect game on which to train a deep neural net, so that's what I'm working on!  For now, I implemented the base game in Python (with an ability to play manually or use AI that make random choices).  I also ran some basic simulations using the random-choice AI players. 
+I recently played Machi Koro for the first time with some friends.  Given the relative simplicity, it seemed like the perfect game on which to train a deep neural net, so that's what I'm working on!  For now, I implemented the base game in Python (with an ability to play manually or use AI that make random choices).
 
 
 <b>Python Machi Koro Game Implementation</b>
