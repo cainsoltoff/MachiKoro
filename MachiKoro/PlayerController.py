@@ -23,7 +23,7 @@ class HumanPlayerController(PlayerController):
 
             return choice
 
-class AIPlayerController(PlayerController):
+class RandomAIPlayerController(PlayerController):
     def get_player_choice(self, player_num, message, options, choice_type):
         if not options:
             return -1

@@ -1,6 +1,5 @@
-import StaticCardDatabase
+from MachiKoro import StaticCardDatabase
 
-from PlayerControllers import AIPlayerController, HumanPlayerController
 from copy import copy
 import random
 
@@ -15,7 +14,7 @@ def reloadDB():
     """
     StaticCardDatabase.load_static_game_database(forceReloadFromCSV=True)
 
-class MachiKoro():
+class GameController():
     def __init__(self, num_players=3, print_actions=False):
         self.num_players = num_players
         self.player_turn = 0
@@ -76,6 +75,7 @@ class MachiKoro():
             self.card_supply = game_db["init_card_supply"][:]
             self.player_turn = 0
             self.players = []
+            self.initialize_players()
             self.turn_num = 0
 
     def check_game_over(self, player):
@@ -251,8 +251,6 @@ class MachiKoro():
                               - major_establishments_already_owned
                               - landmarks_already_built)
 
-        if self.player_turn == 0: print(purchase_options)
-
         purchase_choice = self.player_controllers[self.player_turn].get_player_choice(
             self.player_turn, "Pick a card to purchase or -1 to skip:", purchase_options, "purchase")
 
@@ -276,7 +274,6 @@ class MachiKoro():
         if self.print_actions: print("DICE ROLL:", dice)
 
         if self.radio_tower_constructed(self.player_turn):
-            # print("Rolls", dice, "for a total of", rollTotal)
 
             reroll = self.player_controllers[self.player_turn].get_player_choice(self.player_turn,
                                                                                  "Roll again? 1 for Yes. 0 For No",
@@ -291,8 +288,6 @@ class MachiKoro():
             if self.print_actions: print("Doubles Rolled So Player", self.player_turn, "gets another turn!")
         else:
             self.advance_to_next_player()
-
-        # print("Rolls", dice, "for a total of", rollTotal)
 
         # Resolve The Roll
 
@@ -311,14 +306,3 @@ class MachiKoro():
                 break
 
             if self.print_actions: self.display_game()
-
-
-if __name__ == "__main__":
-
-    game = MachiKoro()
-
-    game.add_player_controller(AIPlayerController(game))
-    game.add_player_controller(AIPlayerController(game))
-    game.add_player_controller(HumanPlayerController(game))
-
-    game.run_game()
