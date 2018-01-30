@@ -1,53 +1,82 @@
 import StaticCardDatabase
 
+from PlayerControllers import AIPlayerController, HumanPlayerController
 from copy import copy
 import random
+
+class NumberOfPlayerControllersDoNotMatchNumberOfPlayers(Exception):
+    pass
 
 game_db = StaticCardDatabase.load_static_game_database()
 
 def reloadDB():
+    """
+    Force a reload of the database if you make changes to the unerlying csv files.
+    """
     StaticCardDatabase.load_static_game_database(forceReloadFromCSV=True)
 
 class MachiKoro():
-    def __init__(self, num_players=3, ai=True):
+    def __init__(self, num_players=3, print_actions=False):
         self.num_players = num_players
-        self.ai = ai
         self.player_turn = 0
         self.turn_num = 0
-
+        self.print_actions = print_actions
         self.landmark_cards = {card_id for (card_id, card_props) in enumerate(game_db['card_props']) if card_props['type_id'] == 4}
         self.major_establishment_cards = {card_id for (card_id, card_props) in enumerate(game_db['card_props']) if card_props['type_id'] == 3}
         self.max_card_cost = game_db["max_card_cost"]
         self.bank = game_db["init_bank_amt"]
         self.card_supply = game_db["init_card_supply"][:]
 
-        self.players = {}
+        self.players = []
+        self.player_controllers = []
 
+        self.initialize_players()
+
+    def add_player_controller(self, player_controller):
+        self.player_controllers.append(player_controller)
+
+        if len(self.player_controllers) > self.num_players:
+            raise NumberOfPlayerControllersDoNotMatchNumberOfPlayers
+
+    def display_game(self):
+        print()
+        print()
+        print("GAME STATUS")
+
+        print("Supply",end=":")
+        for (cards, count) in enumerate(self.card_supply):
+            if game_db['card_props'][cards]['type_id'] != 4:
+                print(game_db['card_props'][cards]['card_name'], "[", count, "]", sep="", end=";")
+        print("")
+        for i in range(self.num_players):
+            print("Player", i, end=":")
+            print("Coins:", self.players[i]['coins'], end=";")
+
+            for (cards, count) in enumerate(self.players[i]['player_cards']):
+                if game_db['card_props'][cards]['type_id'] != 4 and count != 0:
+                    print(game_db['card_props'][cards]['card_name'],"[",count,"]", sep="", end=";")
+
+            for (cards, status) in self.players[i]['landmark_status'].items():
+                if status != False:
+                    print(game_db['card_props'][cards]['card_name'], sep="", end=";")
+
+            print("")
+        print("")
+
+    def initialize_players(self):
         for i in range(self.num_players):
             p = {}
             p['coins'] = game_db["init_player_coin_amt"]
             p['player_cards'] = game_db["init_player_cards"][:]
             p['landmark_status'] = copy(game_db["init_player_landmark_status"])
-            self.players[i] = p
-
-    def patience_function(self, player):
-       return 0
-       # 1 - 0 * self.players[player]['coins']/self.max_card_cost
-
+            self.players.append(p)
 
     def reset(self):
             self.bank = game_db["init_bank_amt"]
             self.card_supply = game_db["init_card_supply"][:]
             self.player_turn = 0
-            self.players = {}
+            self.players = []
             self.turn_num = 0
-
-            for i in range(self.num_players):
-                p = {}
-                p['coins'] = game_db["init_player_coin_amt"]
-                p['player_cards'] = game_db["init_player_cards"][:]
-                p['landmark_status'] = copy(game_db["init_player_landmark_status"])
-                self.players[i] = p
 
     def check_game_over(self, player):
         return all(self.players[player]['landmark_status'].values())
@@ -81,10 +110,7 @@ class MachiKoro():
         num_dice = 1
 
         if self.train_station_constructed(self.player_turn):
-            if self.ai:
-                num_dice = random.randint(1,2)
-            else:
-                num_dice = int(input("Roll 1 or 2 Dice?"))
+            num_dice = self.player_controllers[self.player_turn].get_player_choice(self.player_turn, "Roll 1 or 2 Dice?", [1, 2], "dice")
 
         if num_dice == 1:
             dice = random.randint(1, 6),
@@ -137,7 +163,6 @@ class MachiKoro():
             else:
                 shopping_mall_secondary_boost = 0
 
-
             if self.secondary_industry_depends_on_primary_industries(secondary_card_id):
                 primary_industries_for_secondary_industry = game_db["secondary_ind_dep"][secondary_card_id]["dependency_list"]
                 pay_per_primary_industry = game_db["secondary_ind_dep"][secondary_card_id]["multiplier"]
@@ -166,13 +191,8 @@ class MachiKoro():
                 elif card_id == 13:
                     players_to_choose_from = [i for i in range(self.num_players) if i != self.player_turn]
 
-                    if self.ai:
-                        player = random.choice(players_to_choose_from)
-                    else:
-                        player = int(input("Select a player " + str(players_to_choose_from) + " to take from:"))
-
-                        while player not in players_to_choose_from:
-                            player = int(input("Select a player " + str(players_to_choose_from) + " to take from:"))
+                    player = self.player_controllers[self.player_turn].get_player_choice(
+                        self.player_turn, "Select player to take from", players_to_choose_from, "tv_station")
 
                     transfer_amount = min(self.players[player]['coins'], 5)
                     self.players[player]['coins'] -= transfer_amount
@@ -190,24 +210,14 @@ class MachiKoro():
 
                             swappable_cards_for_players[player] = swappable_cards
 
-                    if self.ai:
-                        player_to_swap_with = random.choice(players_to_choose_from)
-                        cardToTake = random.choice(swappable_cards_for_players[player_to_swap_with])
-                        cardToGive = random.choice(swappable_cards_for_players[self.player_turn])
-                    else:
-                        while player_to_swap_with not in players_to_choose_from:
-                            player_to_swap_with = int(input("Select a player " + str(players_to_choose_from) + " to swap non-major card with:"))
+                    player_to_swap_with = self.player_controllers[self.player_turn].get_player_choice(
+                        self.player_turn, "Select player to swap card with", players_to_choose_from, "business_center_player")
 
-                        cardToTake = int(input("Select a card " + str(swappable_cards_for_players[player_to_swap_with]) + " to take:"))
+                    cardToTake = self.player_controllers[self.player_turn].get_player_choice(self.player_turn, "Select card to take",
+                                                        swappable_cards_for_players[player_to_swap_with], "business_center_take")
 
-                        while cardToTake not in swappable_cards_for_players[player_to_swap_with]:
-                            cardToTake = int(input("Select a card " + str(swappable_cards_for_players[player_to_swap_with]) + " to take:"))
-
-                        cardToGive = int(input("Select a card " + str(swappable_cards_for_players[self.player_turn]) + " to give:"))
-
-                        while cardToGive not in swappable_cards_for_players[self.player_turn]:
-                           cardToGive = int(input("Select a card " + str(swappable_cards_for_players[self.player_turn]) + " to give:"))
-
+                    cardToGive = self.player_controllers[self.player_turn].get_player_choice(self.player_turn, "Select card to give",
+                                                        swappable_cards_for_players[self.player_turn], "business_center_give")
 
                     self.players[player_to_swap_with]['player_cards'][cardToTake] -= 1
                     self.players[self.player_turn]['player_cards'][cardToTake] += 1
@@ -237,21 +247,14 @@ class MachiKoro():
 
         cards_with_supply_left = {card_id for (card_id, supply) in enumerate(self.card_supply) if supply > 0}
 
-        purchase_options = list((cards_affordable_with_player_coin_total & cards_with_supply_left
+        purchase_options = list((cards_affordable_with_player_coin_total & cards_with_supply_left)
                               - major_establishments_already_owned
-                              - landmarks_already_built))
+                              - landmarks_already_built)
 
-        if self.ai:
-            if random.random() < self.patience_function(self.player_turn) or len(purchase_options) == 0:
-                purchase_choice = -1
-            else:
-                purchase_choice = random.choice(purchase_options)
-                for landmark in self.landmark_cards:
-                    if landmark in purchase_options:
-                        purchase_choice = landmark
+        if self.player_turn == 0: print(purchase_options)
 
-        else:
-            purchase_choice = int(input("Pick a card to purchase " + str(purchase_options) + " or -1 to skip:"))
+        purchase_choice = self.player_controllers[self.player_turn].get_player_choice(
+            self.player_turn, "Pick a card to purchase or -1 to skip:", purchase_options, "purchase")
 
         if purchase_choice != -1:
             if purchase_choice in self.landmark_cards:
@@ -262,39 +265,60 @@ class MachiKoro():
                 self.card_supply[purchase_choice] -= 1
                 self.players[self.player_turn]['coins'] -= game_db["card_props"][purchase_choice]["cost"]
 
-    def turn(self):
+    def execute_turn(self):
+        self.turn_num += 1
 
-        while(True):
-            self.turn_num += 1
-            # print("Turn", self.turn_num)
-            #
-            # print("Player ", self.playerTurn,"'s Turn", sep="")
+        if self.print_actions: print("Turn ", self.turn_num, ",", " Player ", self.player_turn, sep="")
 
-            # Roll The Dice
-            dice, roll_sum = self.roll_dice()
+        # Roll The Dice
+        dice, roll_sum = self.roll_dice()
 
-            if self.radio_tower_constructed(self.player_turn):
-                # print("Rolls", dice, "for a total of", rollTotal)
+        if self.print_actions: print("DICE ROLL:", dice)
 
-                if self.ai:
-                    reroll = random.choice(["Y","N"])
-                else:
-                    reroll = input("Roll again? Y or N")
-
-                if str.lower(reroll) == 'y':
-                    dice, roll_sum = self.roll_dice()
-
+        if self.radio_tower_constructed(self.player_turn):
             # print("Rolls", dice, "for a total of", rollTotal)
 
-            # Resolve The Roll
+            reroll = self.player_controllers[self.player_turn].get_player_choice(self.player_turn,
+                                                                                 "Roll again? 1 for Yes. 0 For No",
+                                                                                 [0, 1], "radio_tower")
 
-            self.resolve_roll(roll_sum)
-            self.make_purchase_decision()
+            if reroll == 1:
+                dice, roll_sum = self.roll_dice()
+                if self.print_actions: print("Rerolling dice")
+                if self.print_actions: print("DICE ROLL:", dice)
+
+        if self.amusement_park_constructed(self.player_turn) and self.rolled_doubles(dice):
+            if self.print_actions: print("Doubles Rolled So Player", self.player_turn, "gets another turn!")
+        else:
+            self.advance_to_next_player()
+
+        # print("Rolls", dice, "for a total of", rollTotal)
+
+        # Resolve The Roll
+
+        self.resolve_roll(roll_sum)
+        self.make_purchase_decision()
+
+    def run_game(self):
+
+        if len(self.player_controllers) != self.num_players:
+            raise NumberOfPlayerControllersDoNotMatchNumberOfPlayers
+
+        while(True):
+            self.execute_turn()
 
             if self.check_game_over(self.player_turn):
                 break
 
-            if self.amusement_park_constructed(self.player_turn) and self.rolled_doubles(dice):
-                continue
-            else:
-                self.advance_to_next_player()
+            if self.print_actions: self.display_game()
+
+
+if __name__ == "__main__":
+
+    game = MachiKoro()
+
+    game.add_player_controller(AIPlayerController(game))
+    game.add_player_controller(AIPlayerController(game))
+    game.add_player_controller(HumanPlayerController(game))
+
+    game.run_game()
