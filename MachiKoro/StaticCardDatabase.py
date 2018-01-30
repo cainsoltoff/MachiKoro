@@ -4,6 +4,14 @@ import os.path
 
 __CSV_FILE_PATH = "csv_game_db_files/"
 
+
+def reloadDB():
+    """
+    Force a reload of the database if you make changes to the unerlying csv files.
+    """
+    load_static_game_database(forceReloadFromCSV=True)
+
+
 """
 StaticCardDatabase.py
 

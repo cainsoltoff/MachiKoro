@@ -27,5 +27,17 @@ class RandomAIPlayerController(PlayerController):
     def get_player_choice(self, player_num, message, options, choice_type):
         if not options:
             return -1
+
+        if choice_type == "purchase":
+            if 15 in options:
+                return 15
+            elif 16 in options:
+                return 16
+            elif 17 in options:
+                return 17
+            elif 18 in options:
+                return 18
+            else:
+                return random.choice(options)
         else:
             return random.choice(options)

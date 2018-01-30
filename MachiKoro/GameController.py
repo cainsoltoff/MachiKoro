@@ -8,12 +8,6 @@ class NumberOfPlayerControllersDoNotMatchNumberOfPlayers(Exception):
 
 game_db = StaticCardDatabase.load_static_game_database()
 
-def reloadDB():
-    """
-    Force a reload of the database if you make changes to the unerlying csv files.
-    """
-    StaticCardDatabase.load_static_game_database(forceReloadFromCSV=True)
-
 class GameController():
     def __init__(self, num_players=3, print_actions=False):
         self.num_players = num_players
@@ -25,7 +19,7 @@ class GameController():
         self.max_card_cost = game_db["max_card_cost"]
         self.bank = game_db["init_bank_amt"]
         self.card_supply = game_db["init_card_supply"][:]
-
+        self.gameOver = False
         self.players = []
         self.player_controllers = []
 
@@ -77,9 +71,10 @@ class GameController():
             self.players = []
             self.initialize_players()
             self.turn_num = 0
+            self.gameOver = False
 
     def check_game_over(self, player):
-        return all(self.players[player]['landmark_status'].values())
+        self.gameOver = all(self.players[player]['landmark_status'].values())
 
     def advance_to_next_player(self):
         self.player_turn = (self.player_turn + 1) % self.num_players
@@ -175,6 +170,8 @@ class GameController():
                 secondary_card_payout = game_db["card_props"][number_of_secondary_card_owned]["pay_amt"]
                 self.players[self.player_turn]['coins'] += (shopping_mall_secondary_boost + secondary_card_payout) * number_of_secondary_card_owned
 
+    def get_card_count_for_player(self, player_num, card_id):
+        return self.players[player_num]['player_cards'][card_id]
 
     def resolve_major_establishments(self, roll_sum):
 
@@ -284,15 +281,19 @@ class GameController():
                 if self.print_actions: print("Rerolling dice")
                 if self.print_actions: print("DICE ROLL:", dice)
 
-        if self.amusement_park_constructed(self.player_turn) and self.rolled_doubles(dice):
-            if self.print_actions: print("Doubles Rolled So Player", self.player_turn, "gets another turn!")
-        else:
-            self.advance_to_next_player()
-
         # Resolve The Roll
 
         self.resolve_roll(roll_sum)
         self.make_purchase_decision()
+
+        self.check_game_over(self.player_turn)
+
+        if not self.gameOver:
+            if self.amusement_park_constructed(self.player_turn) and self.rolled_doubles(dice):
+                if self.print_actions: print("Doubles Rolled So Player", self.player_turn, "gets another turn!")
+            else:
+                self.advance_to_next_player()
+
 
     def run_game(self):
 
@@ -302,7 +303,7 @@ class GameController():
         while(True):
             self.execute_turn()
 
-            if self.check_game_over(self.player_turn):
+            if self.gameOver:
                 break
 
             if self.print_actions: self.display_game()
