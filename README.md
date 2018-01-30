@@ -1,10 +1,12 @@
-# Machi Koro Game by Cain Soltoff
+# Machi Koro by Cain Soltoff
 
-#### I recently played Machi Koro for the first time with some friends.  Given the relative simplicity, it seemed like the perfect game on which to train a deep neural net, so that's what I'm working on!  For now, I've implenented the base game in python (with an ability to play manually or using randomized AI) and run some basic simulations using the randomized AI. 
+I recently played Machi Koro for the first time with some friends.  Given the relative simplicity, it seemed like the perfect game on which to train a deep neural net, so that's what I'm working on!  For now, I implemented the base game in Python (with an ability to play manually or use AI that make random choices).  I also ran some basic simulations using the random-choice AI players. 
 
 
-###<u> Python Machi Koro Game Implementation</u> 
-### The MachiKoro package contains all the necessary code to play the game with humans, AI players, or a mix.
+<b>Python Machi Koro Game Implementation</b>
+---
+
+The MachiKoro package contains all the necessary code to play the game with humans, AI players, or a mix.
 
 <b>MachiKoro.GameController</b> - This is the main sub-module.  In addition to the GameController class which will run the game,
                            there's also a top-level reloadDB method that forces the regeneration of the .pkl file from
@@ -18,13 +20,15 @@
                                and players (through the csv files in csv_game_db_files).
 
 
-<u>Example: Three Player Game with One Human and Two AI's</u>
+---
+<b>*Example: Three Player Game with One Human and Two AI's*</b>
+
+
+
 
 ```
 from MachiKoro.GameController import GameController
-from MachiKoro.GameController import game_db
 from MachiKoro.PlayerController import RandomAIPlayerController, HumanPlayerController
-
 
 game = GameController(num_players=3, print_actions=False)
 
