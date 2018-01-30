@@ -8,16 +8,16 @@ I recently played Machi Koro for the first time with some friends.  Given the re
 
 The MachiKoro package contains all the necessary code to play the game with humans, AI players, or a mix. Currently, only the original game is implemented, but I will eventually add the expansions.  You can also customize the card payouts/dice triggers, intial game values (i.e. starting cards, coins per player), etc by changing the CSV files in the module and calling reloadDB in MachiKoro.StaticCardDatabase.
 
-<b>MachiKoro.GameController</b> - This is the main sub-module whcih contains the class GameController class which will handle the game.
+<b>MachiKoro.GameController</b> - This is the main sub-module which contains the main GameController.
                            
 
 <b>MachiKoro.PlayerController</b> - Contains an abstract base class Player Controller that can be sub-classed to create new player controllers.
                              Also includes two player controller types - a randomized AI and a human player (where the game queries the player for input).
                              Add PlayerControllers to the GameController via the latter's add_player_controller method.
 
-<b>MachiKoro.StaticCardDatabase</b> - generates a serialized python object containing all the base game information on cards
-                                      and players (through the csv files in csv_game_db_files) if one doesn't exist.  There's also a top-level reloadDB method that forces the regeneration of the .pkl file from
-                                      the underlying CSV files (i.e. if you make edits).
+<b>MachiKoro.StaticCardDatabase</b> - generates a serialized python object *static_game_db.pkl* (if it doesn't exist) containing all the base game information on cards
+                                      and players (through the csv files in csv_game_db_files).  There's also a top-level reloadDB method that forces the regeneration of the .pkl file from
+                                      the underlying CSV files (i.e. call if you make edits to the csv files).
 
 
 ---
